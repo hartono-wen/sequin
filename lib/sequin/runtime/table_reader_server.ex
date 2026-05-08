@@ -8,6 +8,7 @@ defmodule Sequin.Runtime.TableReaderServer do
   alias Sequin.Consumers.ConsumerEvent
   alias Sequin.Consumers.SinkConsumer
   alias Sequin.Databases.ConnectionCache
+  alias Sequin.Databases.PostgresDatabase
   alias Sequin.Error
   alias Sequin.Error.InvariantError
   alias Sequin.Error.ServiceError
@@ -362,7 +363,7 @@ defmodule Sequin.Runtime.TableReaderServer do
       # Avoid copying state into the Task by using local variables
       page_size = state.page_size_optimizer_mod.size(state.page_size_optimizer)
       test_pid = state.test_pid
-      database = database(state)
+      read_database = read_database(state)
       table = table(state)
       cursor = state.cursor
       fetch_batch_pks = state.fetch_batch_pks
@@ -373,7 +374,7 @@ defmodule Sequin.Runtime.TableReaderServer do
           maybe_setup_allowances(test_pid)
 
           res =
-            with {:ok, conn} <- ConnectionCache.connection(database) do
+            with {:ok, conn} <- ConnectionCache.connection(read_database) do
               fetch_batch_pks.(
                 conn,
                 table,
@@ -453,7 +454,8 @@ defmodule Sequin.Runtime.TableReaderServer do
 
         # Start the batch fetch task
         test_pid = state.test_pid
-        database = database(state)
+        watermark_database = database(state)
+        read_database = read_database(state)
         table = table(state)
         table_oid = state.backfill.table_oid
         consumer = state.consumer
@@ -469,7 +471,8 @@ defmodule Sequin.Runtime.TableReaderServer do
 
             res =
               TableReader.with_watermark(
-                database,
+                watermark_database,
+                read_database,
                 slot_id,
                 id,
                 batch_id,
@@ -996,6 +999,10 @@ defmodule Sequin.Runtime.TableReaderServer do
 
   defp database(%State{consumer: consumer}) do
     consumer.replication_slot.postgres_database
+  end
+
+  defp read_database(%State{} = state) do
+    state |> database() |> PostgresDatabase.read_database()
   end
 
   defp table(%State{} = state) do

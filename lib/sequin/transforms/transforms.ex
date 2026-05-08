@@ -117,15 +117,28 @@ defmodule Sequin.Transforms do
       use_local_tunnel: database.use_local_tunnel
     }
 
-    if is_nil(database.primary) do
+    result =
+      if is_nil(database.primary) do
+        result
+      else
+        Map.put(result, :primary, %{
+          username: database.primary.username,
+          password: SensitiveValue.new(database.primary.password, show_sensitive),
+          hostname: database.primary.hostname,
+          port: database.primary.port,
+          database: database.primary.database
+        })
+      end
+
+    if is_nil(database.read_replica) do
       result
     else
-      Map.put(result, :primary, %{
-        username: database.primary.username,
-        password: SensitiveValue.new(database.primary.password, show_sensitive),
-        hostname: database.primary.hostname,
-        port: database.primary.port,
-        database: database.primary.database
+      Map.put(result, :read_replica, %{
+        username: database.read_replica.username,
+        password: SensitiveValue.new(database.read_replica.password, show_sensitive),
+        hostname: database.read_replica.hostname,
+        port: database.read_replica.port,
+        database: database.read_replica.database
       })
     end
   end
@@ -679,16 +692,24 @@ defmodule Sequin.Transforms do
         "use_local_tunnel",
         "ipv6",
         "annotations",
-        "primary"
+        "primary",
+        "read_replica"
       ])
       |> Map.put_new("port", 5432)
 
-    with {:ok, primary} <- parse_primary_params(db_params) do
-      if is_map_key(allowed_params, "primary") do
-        {:ok, Map.put(allowed_params, "primary", primary)}
-      else
-        {:ok, allowed_params}
-      end
+    with {:ok, primary} <- parse_primary_params(db_params),
+         {:ok, read_replica} <- parse_read_replica_params(db_params) do
+      allowed_params =
+        if is_map_key(allowed_params, "primary"),
+          do: Map.put(allowed_params, "primary", primary),
+          else: allowed_params
+
+      allowed_params =
+        if is_map_key(allowed_params, "read_replica"),
+          do: Map.put(allowed_params, "read_replica", read_replica),
+          else: allowed_params
+
+      {:ok, allowed_params}
     end
   end
 
@@ -698,6 +719,14 @@ defmodule Sequin.Transforms do
   end
 
   defp parse_primary_params(_) do
+    {:ok, nil}
+  end
+
+  defp parse_read_replica_params(%{"read_replica" => read_replica}) when is_map(read_replica) do
+    parse_db_params(read_replica)
+  end
+
+  defp parse_read_replica_params(_) do
     {:ok, nil}
   end
 

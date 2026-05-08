@@ -157,6 +157,32 @@ defmodule Sequin.TableReaderTest do
 
       assert result.rows == [[1]]
     end
+
+    test "uses distinct conns for SELECT and watermark when read_db differs from watermark_db", %{db: db} do
+      table_oid = 12_345
+      batch_id = "test_batch_split"
+
+      # Two struct ids → ConnectionCache will manage two pools, even though
+      # they point at the same physical PG instance for this test.
+      read_db = %{db | id: "readreplicaof-#{db.id}"}
+
+      ConnectionCache.invalidate_connection(db)
+      ConnectionCache.invalidate_connection(read_db)
+
+      {:ok, read_conn} = ConnectionCache.connection(read_db)
+
+      {:ok, result, _lsn} =
+        TableReader.with_watermark(db, read_db, UUID.uuid4(), UUID.uuid4(), batch_id, table_oid, fn conn ->
+          send(self(), {:select_conn, conn})
+          Postgrex.query(conn, "select 42", [])
+        end)
+
+      assert result.rows == [[42]]
+
+      # The SELECT received the read_db's pool — not a freshly minted
+      # watermark_db pool.
+      assert_received {:select_conn, ^read_conn}
+    end
   end
 
   describe "fetch_batch/4" do

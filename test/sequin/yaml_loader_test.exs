@@ -23,6 +23,7 @@ defmodule Sequin.YamlLoaderTest do
   alias Sequin.Databases
   alias Sequin.Databases.PostgresDatabase
   alias Sequin.Databases.PostgresDatabasePrimary
+  alias Sequin.Databases.PostgresDatabaseReadReplica
   alias Sequin.Error.BadRequestError
   alias Sequin.Factory.AccountsFactory
   alias Sequin.Factory.ConsumersFactory
@@ -2401,6 +2402,85 @@ defmodule Sequin.YamlLoaderTest do
       assert db.primary.hostname == "primary.example.com"
       assert db.primary.port == 5432
       assert db.primary.database == "primary_db"
+    end
+  end
+
+  describe "primary with read_replica" do
+    test "creates a database with read_replica connection parameters" do
+      assert :ok =
+               YamlLoader.apply_from_yml!("""
+               account:
+                 name: "Configured by Sequin"
+
+               databases:
+                 - name: "primary-db"
+                   username: "postgres"
+                   password: "postgres"
+                   hostname: "localhost"
+                   database: "sequin_test"
+                   slot_name: "#{replication_slot()}"
+                   publication_name: "#{@publication}"
+                   read_replica:
+                     username: "replica_user"
+                     password: "replica_password"
+                     hostname: "replica.example.com"
+                     port: 5432
+                     database: "replica_db"
+               """)
+
+      assert [%PostgresDatabase{} = db] = Repo.all(PostgresDatabase)
+
+      assert db.name == "primary-db"
+      assert db.hostname == "localhost"
+
+      assert %PostgresDatabaseReadReplica{} = db.read_replica
+      assert db.read_replica.username == "replica_user"
+      assert db.read_replica.password == "replica_password"
+      assert db.read_replica.hostname == "replica.example.com"
+      assert db.read_replica.port == 5432
+      assert db.read_replica.database == "replica_db"
+    end
+
+    test "updates a database to add then remove read_replica" do
+      assert :ok =
+               YamlLoader.apply_from_yml!("""
+               account:
+                 name: "Configured by Sequin"
+
+               databases:
+                 - name: "primary-db"
+                   username: "postgres"
+                   password: "postgres"
+                   hostname: "localhost"
+                   database: "sequin_test"
+                   slot_name: "#{replication_slot()}"
+                   publication_name: "#{@publication}"
+               """)
+
+      assert [%PostgresDatabase{read_replica: nil}] = Repo.all(PostgresDatabase)
+
+      assert :ok =
+               YamlLoader.apply_from_yml!("""
+               account:
+                 name: "Configured by Sequin"
+
+               databases:
+                 - name: "primary-db"
+                   username: "postgres"
+                   password: "postgres"
+                   hostname: "localhost"
+                   database: "sequin_test"
+                   slot_name: "#{replication_slot()}"
+                   publication_name: "#{@publication}"
+                   read_replica:
+                     username: "replica_user"
+                     password: "replica_password"
+                     hostname: "replica.example.com"
+                     port: 5432
+                     database: "replica_db"
+               """)
+
+      assert [%PostgresDatabase{read_replica: %PostgresDatabaseReadReplica{}}] = Repo.all(PostgresDatabase)
     end
   end
 

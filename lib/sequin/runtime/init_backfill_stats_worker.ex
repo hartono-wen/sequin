@@ -8,6 +8,7 @@ defmodule Sequin.Runtime.InitBackfillStatsWorker do
     unique: [period: 30]
 
   alias Sequin.Consumers
+  alias Sequin.Databases.PostgresDatabase
   alias Sequin.Repo
   alias Sequin.Runtime.TableReader
 
@@ -26,7 +27,9 @@ defmodule Sequin.Runtime.InitBackfillStatsWorker do
         |> Sequin.Enum.find!(&(&1.oid == backfill.table_oid))
         |> Map.put(:sort_column_attnum, backfill.sort_column_attnum)
 
-      case TableReader.fast_count_estimate(database, table, backfill.initial_min_cursor, timeout: :infinity) do
+      read_db = PostgresDatabase.read_database(database)
+
+      case TableReader.fast_count_estimate(read_db, table, backfill.initial_min_cursor, timeout: :infinity) do
         {:ok, count} ->
           Consumers.update_backfill(backfill, %{rows_initial_count: count}, skip_lifecycle: true)
 

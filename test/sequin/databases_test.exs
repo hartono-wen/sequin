@@ -23,6 +23,34 @@ defmodule Sequin.DatabasesTest do
     end
   end
 
+  describe "PostgresDatabase.read_database/1" do
+    test "returns the input db unchanged when no read_replica is configured" do
+      db = DatabasesFactory.postgres_database(read_replica: nil)
+      assert PostgresDatabase.read_database(db) == db
+    end
+
+    test "returns a struct with the replica's connection params and an aliased id" do
+      replica = DatabasesFactory.postgres_database_read_replica(hostname: "replica.example.com", port: 5433)
+
+      db =
+        DatabasesFactory.postgres_database(
+          id: "abc-123",
+          hostname: "primary.example.com",
+          port: 5432,
+          pool_size: 10,
+          read_replica: replica
+        )
+
+      result = PostgresDatabase.read_database(db)
+      assert result.id == "readreplicaof-abc-123"
+      assert result.hostname == "replica.example.com"
+      assert result.port == 5433
+      assert result.account_id == db.account_id
+      # Replica pool is 3× the source pool to absorb backfill + enrichment load
+      assert result.pool_size == 30
+    end
+  end
+
   describe "list_active_dbs" do
     test "returns empty list if no databases exist" do
       assert Databases.list_active_dbs() == []

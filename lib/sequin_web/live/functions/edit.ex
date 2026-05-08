@@ -712,8 +712,9 @@ defmodule SequinWeb.FunctionsLive.Edit do
   defp run_function(%SinkConsumer{enrichment: %Function{} = function} = consumer, message) do
     database = consumer.postgres_database
     database = %{database | tables: [Consumers.synthetic_table() | database.tables]}
+    read_db = PostgresDatabase.read_database(database)
 
-    case Consumers.enrich_messages!(database, function, [message]) do
+    case Consumers.enrich_messages!(read_db, function, [message]) do
       [] ->
         nil
 

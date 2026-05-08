@@ -426,6 +426,22 @@ defmodule SequinWeb.DatabasesLive.Form do
               "password" => primary.password,
               "ssl" => primary.ssl
             }
+        end,
+      "has_read_replica" => not is_nil(database.read_replica),
+      "read_replica" =>
+        case database.read_replica do
+          nil ->
+            %{"url" => nil, "ssl" => true}
+
+          read_replica ->
+            %{
+              "hostname" => read_replica.hostname,
+              "database" => read_replica.database,
+              "port" => read_replica.port || 5432,
+              "username" => read_replica.username || "postgres",
+              "password" => read_replica.password,
+              "ssl" => read_replica.ssl
+            }
         end
     }
   end
@@ -462,6 +478,7 @@ defmodule SequinWeb.DatabasesLive.Form do
     hostname = if form["useLocalTunnel"], do: Application.get_env(:sequin, :portal_hostname), else: form["hostname"]
 
     primary = if form["is_replica"], do: form["primary"]
+    read_replica = if form["has_read_replica"], do: form["read_replica"]
 
     %{
       "database" => %{
@@ -474,7 +491,8 @@ defmodule SequinWeb.DatabasesLive.Form do
         "ssl" => ssl,
         "pool_size" => pool_size,
         "use_local_tunnel" => form["useLocalTunnel"],
-        "primary" => primary
+        "primary" => primary,
+        "read_replica" => read_replica
       },
       "replication_slot" => %{
         "publication_name" => maybe_trim(form["publication_name"]),

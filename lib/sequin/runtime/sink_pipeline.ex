@@ -261,9 +261,11 @@ defmodule Sequin.Runtime.SinkPipeline do
   end
 
   defp enrich_message(message, context) do
+    read_db = PostgresDatabase.read_database(context.consumer.postgres_database)
+
     Message.update_data(
       message,
-      &Consumers.enrich_message!(context.consumer.postgres_database, context.consumer.enrichment, &1)
+      &Consumers.enrich_message!(read_db, context.consumer.enrichment, &1)
     )
   end
 

@@ -247,4 +247,25 @@ defmodule Sequin.Factory.DatabasesFactory do
     |> postgres_database_primary()
     |> Sequin.Map.from_ecto()
   end
+
+  def postgres_database_read_replica(attrs \\ []) do
+    merge_attributes(
+      %Sequin.Databases.PostgresDatabaseReadReplica{
+        database: Factory.postgres_object(),
+        hostname: Factory.hostname(),
+        port: Factory.port(),
+        ssl: Factory.boolean(),
+        username: Factory.username(),
+        password: Factory.password(),
+        ipv6: Factory.boolean()
+      },
+      attrs
+    )
+  end
+
+  def postgres_database_read_replica_attrs(attrs \\ []) do
+    attrs
+    |> postgres_database_read_replica()
+    |> Sequin.Map.from_ecto()
+  end
 end

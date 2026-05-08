@@ -68,6 +68,15 @@
       username: string;
       password: string;
     };
+    has_read_replica: boolean;
+    read_replica: {
+      ssl: boolean;
+      database: string;
+      hostname: string;
+      port: number;
+      username: string;
+      password: string;
+    };
   };
   export let errors: Record<string, any> = {};
   export let submitError: string | null = null;
@@ -671,6 +680,127 @@ sequin tunnel --ports=[your-local-port]:${form.name}`;
               <div class="flex items-center gap-2">
                 <Switch id="primary_ssl" bind:checked={form.primary.ssl} />
                 <Label for="primary_ssl">Primary SSL</Label>
+              </div>
+            </div>
+          </div>
+        {/if}
+
+        <div class="flex items-center gap-2">
+          <Switch id="has_read_replica" bind:checked={form.has_read_replica} />
+          <Label for="has_read_replica" class="flex items-center">
+            Use read replica for backfills
+            <Tooltip.Root openDelay={200}>
+              <Tooltip.Trigger>
+                <HelpCircle class="inline-block h-4 w-4 text-gray-400 ml-1" />
+              </Tooltip.Trigger>
+              <Tooltip.Content class="max-w-xs">
+                <p class="text-sm text-gray-500">
+                  <b>Read replica</b>
+                  <br />
+                  When configured, Sequin runs backfill SELECT queries against this
+                  replica instead of the primary. The replication slot and watermark
+                  coordination still use the primary connection above.
+                </p>
+              </Tooltip.Content>
+            </Tooltip.Root>
+          </Label>
+        </div>
+
+        {#if form.has_read_replica}
+          <div transition:slide class="space-y-4 mt-2 bg-muted p-4 rounded-md">
+            <div class="space-y-4">
+              <div class="space-y-2">
+                <Label for="read_replica_hostname">Read replica host</Label>
+                <Input
+                  type="text"
+                  id="read_replica_hostname"
+                  placeholder="replica.example.com"
+                  bind:value={form.read_replica.hostname}
+                />
+                {#if databaseErrors.read_replica?.hostname}
+                  <p class="text-destructive text-sm">
+                    {databaseErrors.read_replica?.hostname}
+                  </p>
+                {/if}
+              </div>
+
+              <div class="space-y-2">
+                <Label for="read_replica_port">Read replica port</Label>
+                <Input
+                  type="number"
+                  id="read_replica_port"
+                  placeholder="5432"
+                  bind:value={form.read_replica.port}
+                />
+                {#if databaseErrors.read_replica?.port}
+                  <p class="text-destructive text-sm">
+                    {databaseErrors.read_replica?.port}
+                  </p>
+                {/if}
+              </div>
+
+              <div class="space-y-2">
+                <Label for="read_replica_database">Read replica database</Label>
+                <Input
+                  type="text"
+                  id="read_replica_database"
+                  placeholder="postgres"
+                  bind:value={form.read_replica.database}
+                />
+                {#if databaseErrors.read_replica?.database}
+                  <p class="text-destructive text-sm">
+                    {databaseErrors.read_replica?.database}
+                  </p>
+                {/if}
+              </div>
+
+              <div class="space-y-2">
+                <Label for="read_replica_username">Read replica username</Label>
+                <Input
+                  type="text"
+                  id="read_replica_username"
+                  bind:value={form.read_replica.username}
+                />
+                {#if databaseErrors.read_replica?.username}
+                  <p class="text-destructive text-sm">
+                    {databaseErrors.read_replica?.username}
+                  </p>
+                {/if}
+              </div>
+
+              <div class="space-y-2">
+                <Label for="read_replica_password">Read replica password</Label>
+                <div class="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    id="read_replica_password"
+                    bind:value={form.read_replica.password}
+                  />
+                  <button
+                    type="button"
+                    class="absolute inset-y-0 right-0 flex items-center pr-3"
+                    on:click={togglePasswordVisibility}
+                  >
+                    {#if showPassword}
+                      <EyeOff class="h-4 w-4 text-gray-400" />
+                    {:else}
+                      <Eye class="h-4 w-4 text-gray-400" />
+                    {/if}
+                  </button>
+                </div>
+                {#if databaseErrors.read_replica?.password}
+                  <p class="text-destructive text-sm">
+                    {databaseErrors.read_replica?.password}
+                  </p>
+                {/if}
+              </div>
+
+              <div class="flex items-center gap-2">
+                <Switch
+                  id="read_replica_ssl"
+                  bind:checked={form.read_replica.ssl}
+                />
+                <Label for="read_replica_ssl">Read replica SSL</Label>
               </div>
             </div>
           </div>

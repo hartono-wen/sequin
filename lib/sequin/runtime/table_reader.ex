@@ -126,7 +126,28 @@ defmodule Sequin.Runtime.TableReader do
 
   # Queries
   @emit_logical_message_sql "select pg_logical_emit_message(true, $1, $2)"
-  def with_watermark(%PostgresDatabase{} = db, replication_slot_id, backfill_id, current_batch_id, table_oid, fun) do
+
+  @doc """
+  Runs `fun` (the SELECT) on `read_db` and emits the high-watermark logical
+  message on `watermark_db`. When the same db is passed for both (the
+  default before the read-replica feature), behavior is unchanged.
+
+  The SELECT runs first, then the watermark is emitted on the watermark
+  connection. With a read replica, the SELECT's snapshot LSN is necessarily
+  ≤ the primary's WAL LSN at watermark emission time. Any change in the
+  window between the replica's snapshot and the watermark will arrive in
+  the slot stream before the watermark message, so the existing `pks_seen`
+  dedup drops those rows from the batch.
+  """
+  def with_watermark(
+        %PostgresDatabase{} = watermark_db,
+        %PostgresDatabase{} = read_db,
+        replication_slot_id,
+        backfill_id,
+        current_batch_id,
+        table_oid,
+        fun
+      ) do
     payload =
       Jason.encode!(%{
         table_oid: table_oid,
@@ -135,11 +156,12 @@ defmodule Sequin.Runtime.TableReader do
         replication_slot_id: replication_slot_id
       })
 
-    with {:ok, conn} <- ConnectionCache.connection(db),
-         {:ok, res} <- fun.(conn),
+    with {:ok, read_conn} <- ConnectionCache.connection(read_db),
+         {:ok, res} <- fun.(read_conn),
+         {:ok, watermark_conn} <- ConnectionCache.connection(watermark_db),
          Logger.debug("[TableReader] Emitting high watermark for batch #{current_batch_id}"),
          {:ok, _} <-
-           Postgres.query(conn, @emit_logical_message_sql, [
+           Postgres.query(watermark_conn, @emit_logical_message_sql, [
              Constants.backfill_batch_high_watermark(),
              payload
            ]),
@@ -147,9 +169,13 @@ defmodule Sequin.Runtime.TableReader do
          # don't understand yet, we can have a situation where the LSN returned by this function is
          # way different from `pg_current_wal_lsn()` / the LSNs coming from the replication slot.
          {:ok, %{rows: [[appx_lsn]]}} <-
-           Postgres.query(conn, "select pg_current_wal_lsn()") do
+           Postgres.query(watermark_conn, "select pg_current_wal_lsn()") do
       {:ok, res, appx_lsn}
     end
+  end
+
+  def with_watermark(%PostgresDatabase{} = db, replication_slot_id, backfill_id, current_batch_id, table_oid, fun) do
+    with_watermark(db, db, replication_slot_id, backfill_id, current_batch_id, table_oid, fun)
   end
 
   @spec fetch_batch_pks(

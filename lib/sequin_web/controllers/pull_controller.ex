@@ -3,6 +3,7 @@ defmodule SequinWeb.PullController do
 
   alias Sequin.Consumers
   alias Sequin.Consumers.SinkConsumer
+  alias Sequin.Databases.PostgresDatabase
   alias Sequin.Error
   alias Sequin.Runtime.SlotMessageStore
   alias Sequin.String, as: SequinString
@@ -175,12 +176,14 @@ defmodule SequinWeb.PullController do
   defp enrich_messages(%SinkConsumer{enrichment: nil}, messages), do: messages
 
   defp enrich_messages(%SinkConsumer{} = consumer, messages) do
+    read_db = PostgresDatabase.read_database(consumer.postgres_database)
+
     # Group by table_oid to batch enrichment queries efficiently
     enriched_by_cursor =
       messages
       |> Enum.group_by(& &1.table_oid)
       |> Enum.flat_map(fn {_table_oid, table_messages} ->
-        Consumers.enrich_messages!(consumer.postgres_database, consumer.enrichment, table_messages)
+        Consumers.enrich_messages!(read_db, consumer.enrichment, table_messages)
       end)
       |> Map.new(&{{&1.commit_lsn, &1.commit_idx}, &1})
 

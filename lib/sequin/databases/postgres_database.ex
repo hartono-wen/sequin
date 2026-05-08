@@ -8,6 +8,7 @@ defmodule Sequin.Databases.PostgresDatabase do
   alias __MODULE__
   alias Ecto.Queryable
   alias Sequin.Databases.PostgresDatabasePrimary
+  alias Sequin.Databases.PostgresDatabaseReadReplica
   alias Sequin.Databases.PostgresDatabaseTable
   alias Sequin.Replication.PostgresReplicationSlot
 
@@ -58,6 +59,7 @@ defmodule Sequin.Databases.PostgresDatabase do
     field :health, :map, virtual: true
 
     embeds_one :primary, PostgresDatabasePrimary, on_replace: :update
+    embeds_one :read_replica, PostgresDatabaseReadReplica, on_replace: :update
 
     belongs_to(:account, Sequin.Accounts.Account)
     has_one(:replication_slot, PostgresReplicationSlot, foreign_key: :postgres_database_id)
@@ -92,6 +94,7 @@ defmodule Sequin.Databases.PostgresDatabase do
     |> validate_not_supabase_pooled()
     |> cast_embed(:tables, with: &PostgresDatabaseTable.changeset/2, required: false)
     |> cast_embed(:primary, with: &PostgresDatabasePrimary.changeset/2, required: false)
+    |> cast_embed(:read_replica, with: &PostgresDatabaseReadReplica.changeset/2, required: false)
     |> unique_constraint([:account_id, :name],
       name: :postgres_databases_account_id_name_index,
       message: "Database name must be unique",
@@ -238,5 +241,47 @@ defmodule Sequin.Databases.PostgresDatabase do
       # WAL messages via the primary, as does the TableReaderServer
       pool_size: 3
     }
+  end
+
+  # Multiplier on db.pool_size for the read-replica's connection pool.
+  # The replica absorbs all read-side load (backfill PK + batch fetches,
+  # enrichment SELECTs, fast_count_estimate) while the writer pool only
+  # handles watermark emits and heartbeats — so we give the replica more
+  # connections to keep up under enrichment + backfill concurrency.
+  @read_replica_pool_size_multiplier 3
+
+  def from_read_replica(%PostgresDatabase{} = db, %PostgresDatabaseReadReplica{} = rr) do
+    # Overlay the replica's connection fields onto the original db, preserving
+    # tables, pg_major_version, account_id, etc. — anything callers may read
+    # off the struct besides the connection params.
+    %{
+      db
+      | database: rr.database,
+        hostname: rr.hostname,
+        password: rr.password,
+        port: rr.port,
+        ssl: rr.ssl,
+        username: rr.username,
+        ipv6: rr.ipv6,
+        pool_size: db.pool_size * @read_replica_pool_size_multiplier,
+        # Don't carry the embed across — the replica struct shouldn't
+        # recursively claim a replica of its own.
+        read_replica: nil,
+        primary: nil
+    }
+  end
+
+  @doc """
+  Returns the database to use for read-only backfill SELECTs. When a
+  read replica is configured, returns a synthetic struct pointed at the
+  replica with an aliased id so the ConnectionCache pools it separately.
+  Otherwise returns `db` unchanged.
+  """
+  def read_database(%PostgresDatabase{read_replica: nil} = db), do: db
+
+  def read_database(%PostgresDatabase{read_replica: %PostgresDatabaseReadReplica{} = rr} = db) do
+    db
+    |> from_read_replica(rr)
+    |> Map.put(:id, "readreplicaof-#{db.id}")
   end
 end

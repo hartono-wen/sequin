@@ -8,8 +8,17 @@ import Config
 
 self_hosted = System.get_env("SELF_HOSTED", "0") in ~w(1 true)
 
+# Treat an empty SENTRY_DSN env var the same as unset — Sentry's config
+# validator rejects "" but accepts nil. Empty values can leak in from
+# Docker's `ENV X=${X}` when the build arg isn't passed.
+sentry_dsn =
+  case System.get_env("SENTRY_DSN") do
+    "" -> nil
+    other -> other
+  end
+
 config :sentry,
-  dsn: System.get_env("SENTRY_DSN"),
+  dsn: sentry_dsn,
   release: System.get_env("RELEASE_VERSION")
 
 config :sequin, Sequin.ConsoleLogger, drop_metadata_keys: [:mfa]
