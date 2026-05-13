@@ -260,6 +260,10 @@ defmodule Sequin.Runtime.SinkPipeline do
     end
   end
 
+  # No enrichment configured — short-circuit before touching postgres_database,
+  # which is only preloaded when there *is* an enrichment function.
+  defp enrich_message(message, %{consumer: %SinkConsumer{enrichment: nil}}), do: message
+
   defp enrich_message(message, context) do
     read_db = PostgresDatabase.read_database(context.consumer.postgres_database)
 
