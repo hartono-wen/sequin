@@ -33,10 +33,16 @@ defmodule Sequin.Runtime.MeilisearchPipelineTest do
       assert MeilisearchPipeline.batchers_config(consumer)[:default][:batch_timeout] == 500
     end
 
-    test "uses an elevated batcher concurrency to exploit Meilisearch auto-batching" do
-      consumer = %SinkConsumer{batch_timeout_ms: nil, sink: %MeilisearchSink{batch_size: 1000}}
+    test "defaults batcher concurrency to 24 (elevated, for Meilisearch auto-batching)" do
+      consumer = %SinkConsumer{batcher_concurrency: nil, batch_timeout_ms: nil, sink: %MeilisearchSink{batch_size: 1000}}
 
       assert MeilisearchPipeline.batchers_config(consumer)[:default][:concurrency] == 24
+    end
+
+    test "honors the consumer's batcher_concurrency when set" do
+      consumer = %SinkConsumer{batcher_concurrency: 8, batch_timeout_ms: nil, sink: %MeilisearchSink{batch_size: 1000}}
+
+      assert MeilisearchPipeline.batchers_config(consumer)[:default][:concurrency] == 8
     end
   end
 

@@ -25,7 +25,8 @@ defmodule Sequin.Runtime.MeilisearchPipeline do
     # time) stays within wait_for_task's budget / ack_wait_ms — otherwise tasks would be
     # nacked/redelivered. (Requires enough message-store headroom; the small-host memory
     # deadlock that previously forced concurrency=4 was resolved by sizing the host.)
-    concurrency = 24
+    # Overridable per-consumer via batcher_concurrency (defaults to 24).
+    concurrency = consumer.batcher_concurrency || 24
 
     [
       default: [
